@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1f1c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>云宠物世界 · 第 0 步分身查看器</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #1a1f1c;
+      --panel: #232a26;
+      --panel-2: #2c342f;
+      --line: #3d4a43;
+      --text: #f3f6f3;
+      --muted: #a8b5ad;
+      --accent: #7dce9a;
+      --accent-dim: #3d7a54;
+      --danger: #e07a7a;
+      --safe: env(safe-area-inset-top, 0px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-l: env(safe-area-inset-left, 0px);
+      --safe-r: env(safe-area-inset-right, 0px);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding-top: var(--safe);
+      padding-bottom: var(--safe-b);
+      padding-left: var(--safe-l);
+      padding-right: var(--safe-r);
+    }
+    header {
+      flex: 0 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    header .hint {
+      color: var(--muted);
+      font-size: 11px;
+      margin-right: auto;
+    }
+    .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+    button, .file-btn, select {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 8px;
+      font-size: 13px;
+      padding: 7px 10px;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+    button:active, .file-btn:active { transform: scale(0.98); }
+    button.primary, .file-btn.primary {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: #f4fff7;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .file-btn { display: inline-block; }
+    .file-btn input { display: none; }
+    .stage {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .pane {
+      position: relative;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .photo-pane {
+      flex: 0 0 40%;
+      background: #111614;
+      border-bottom: 1px solid var(--line);
+    }
+    .model-pane { flex: 1 1 60%; background: #1c221f; }
+    @media (orientation: landscape), (min-width: 900px) {
+      .stage { flex-direction: row; }
+      .photo-pane, .model-pane { flex: 1 1 50%; }
+      .photo-pane { border-bottom: 0; border-right: 1px solid var(--line); }
+    }
+    #canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .photo-viewport {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      touch-action: none;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0e1310;
+    }
+    .photo-viewport img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      transform-origin: center center;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      padding: 0;
+      background: rgba(20, 28, 24, 0.7);
+      z-index: 2;
+    }
+    .nav-btn.prev { left: 8px; }
+    .nav-btn.next { right: 8px; }
+    .dots {
+      position: absolute;
+      left: 0; right: 0; bottom: 8px;
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .dots span {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.35);
+    }
+    .dots span.on { background: var(--accent); }
+    .badge {
+      position: absolute;
+      top: 8px; left: 8px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(20, 28, 24, 0.75);
+      color: var(--muted);
+      z-index: 2;
+    }
+    .overlay-msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 16px;
+      font-size: 14px;
+      color: var(--muted);
+      pointer-events: none;
+      z-index: 3;
+    }
+    .overlay-msg.error { color: var(--danger); }
+    footer {
+      flex: 0 0 auto;
+      padding: 8px 10px calc(8px + 0px);
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .stats strong { color: var(--text); font-weight: 600; }
+    .rate-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .rate-row span.label { color: var(--muted); }
+    .stars { display: flex; gap: 4px; }
+    .stars button {
+      width: 36px;
+      height: 32px;
+      padding: 0;
+      font-size: 16px;
+      border-radius: 8px;
+    }
+    .stars button.on {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: #fffef4;
+    }
+    .local-note { font-size: 11px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>云宠物分身查看器</h1>
+    <span class="hint">照片与 3D 对比 · 第 0 步</span>
+    <div class="btns">
+      <label class="file-btn primary">加载 3D 模型
+        <input id="modelInput" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
+      </label>
+      <label class="file-btn">加载原照片
+        <input id="photoInput" type="file" accept="image/*" multiple />
+      </label>
+      <button type="button" id="defaultBtn">示例模型</button>
+      <select id="bgSelect" aria-label="背景">
+        <option value="studio">背景：工作室</option>
+        <option value="park">背景：公园</option>
+        <option value="sky">背景：天空</option>
+        <option value="dark">背景：深色</option>
+        <option value="white">背景：白底</option>
+      </select>
+      <button type="button" id="shot3dBtn">保存 3D 图</button>
+      <button type="button" id="shotCmpBtn">保存对比图</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <section class="pane photo-pane" aria-label="原照片">
+      <div class="badge" id="photoBadge">原照片</div>
+      <div class="photo-viewport" id="photoViewport">
+        <p class="empty" id="photoEmpty">请选择一张或多张宠物原照片，与右侧（竖屏时为下方）3D 模型对比。<br />可左右滑动切换，双指放大。</p>
+        <img id="photoImg" alt="宠物原照片" hidden />
+      </div>
+      <button type="button" class="nav-btn prev" id="prevPhoto" hidden aria-label="上一张">‹</button>
+      <button type="button" class="nav-btn next" id="nextPhoto" hidden aria-label="下一张">›</button>
+      <div class="dots" id="photoDots" hidden></div>
+    </section>
+    <section class="pane model-pane" aria-label="3D 模型">
+      <div class="badge">3D 模型</div>
+      <canvas id="canvas"></canvas>
+      <div class="overlay-msg" id="modelMsg">正在加载示例模型…</div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="stats">
+      <span>模型：<strong id="statName">—</strong></span>
+      <span>文件：<strong id="statSize">—</strong></span>
+      <span>面数：<strong id="statFaces">—</strong></span>
+      <span>顶点数：<strong id="statVerts">—</strong></span>
+    </div>
+    <div class="rate-row">
+      <span class="label">像不像（1–5 分）</span>
+      <div class="stars" id="stars">
+        <button type="button" data-score="1" aria-label="1 分">1</button>
+        <button type="button" data-score="2" aria-label="2 分">2</button>
+        <button type="button" data-score="3" aria-label="3 分">3</button>
+        <button type="button" data-score="4" aria-label="4 分">4</button>
+        <button type="button" data-score="5" aria-label="5 分">5</button>
+      </div>
+      <span class="local-note" id="rateNote">只保存在本机浏览器，不会上传。</span>
+    </div>
+  </footer>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+    // Fox.glb 已不在 three.js 官方 examples 目录（2026-11-11 核实为 404）。
+    // 改用官方示例中可访问的四足动物 Horse.glb（HTTP 200，CORS *，181808 字节）。
+    // 使用本地官方示例模型，避免中国大陆访问 threejs.org / jsDelivr 不稳定。
+    const DEFAULT_MODEL_URL = "./vendor/models/Horse.glb";
+    const DEFAULT_MODEL_NAME = "Horse.glb（three.js 官方示例，本地打包）";
+    const RATING_KEY = "yunpet-viewer-ratings-v1";
+
+    const canvas = document.getElementById("canvas");
+    const modelMsg = document.getElementById("modelMsg");
+    const photoViewport = document.getElementById("photoViewport");
+    const photoImg = document.getElementById("photoImg");
+    const photoEmpty = document.getElementById("photoEmpty");
+    const photoBadge = document.getElementById("photoBadge");
+    const photoDots = document.getElementById("photoDots");
+    const prevPhoto = document.getElementById("prevPhoto");
+    const nextPhoto = document.getElementById("nextPhoto");
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+      powerPreference: "high-performance",
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+    camera.position.set(2.4, 1.6, 3.2);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.screenSpacePanning = false;
+    controls.minDistance = 0.4;
+    controls.maxDistance = 40;
+    controls.maxPolarAngle = Math.PI * 0.49;
+    controls.target.set(0, 0.7, 0);
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+
+    const hemi = new THREE.HemisphereLight(0xe8f0ff, 0x3d4a3a, 1.05);
+    scene.add(hemi);
+    const key = new THREE.DirectionalLight(0xfff6e8, 1.35);
+    key.position.set(3.2, 6.5, 2.4);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.near = 0.5;
+    key.shadow.camera.far = 30;
+    key.shadow.bias = -0.0008;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xd7e8ff, 0.45);
+    fill.position.set(-3, 2.5, -2);
+    scene.add(fill);
+
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(8, 64),
+      new THREE.MeshStandardMaterial({
+        color: 0x8aa37a,
+        roughness: 0.92,
+        metalness: 0.02,
+      })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const backgrounds = {
+      studio: { scene: 0xc9cfc8, ground: 0xb7bdb6, hemiSky: 0xf2f4f6, hemiGround: 0x6a6e68, exposure: 1.05 },
+      park: { scene: 0xb9d4c2, ground: 0x8aa37a, hemiSky: 0xe8f0ff, hemiGround: 0x3d4a3a, exposure: 1.05 },
+      sky: { scene: 0x9ec9e8, ground: 0xd6c7a4, hemiSky: 0xf0f7ff, hemiGround: 0x8a7a5a, exposure: 1.1 },
+      dark: { scene: 0x1b1e22, ground: 0x2a2e33, hemiSky: 0x9aa6b5, hemiGround: 0x1c1c1c, exposure: 0.95 },
+      white: { scene: 0xf4f4f2, ground: 0xe6e6e2, hemiSky: 0xffffff, hemiGround: 0xc8c8c4, exposure: 1.15 },
+    };
+
+    function applyBackground(name) {
+      const bg = backgrounds[name] || backgrounds.studio;
+      scene.background = new THREE.Color(bg.scene);
+      scene.fog = name === "dark" ? new THREE.Fog(bg.scene, 8, 22) : null;
+      ground.material.color.set(bg.ground);
+      hemi.color.set(bg.hemiSky);
+      hemi.groundColor.set(bg.hemiGround);
+      renderer.toneMappingExposure = bg.exposure;
+    }
+    applyBackground("studio");
+
+    const loader = new GLTFLoader();
+    let currentRoot = null;
+    let mixer = null;
+    let clock = new THREE.Clock();
+    let currentModelName = "";
+    let currentFileSize = 0;
+    let objectUrls = [];
+
+    function revokeUrls() {
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
+      objectUrls = [];
+    }
+
+    function formatBytes(n) {
+      if (!n && n !== 0) return "—";
+      if (n < 1024) return n + " B";
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+      return (n / (1024 * 1024)).toFixed(2) + " MB";
+    }
+
+    function countMesh(root) {
+      let faces = 0;
+      let verts = 0;
+      root.traverse((obj) => {
+        if (!obj.isMesh || !obj.geometry) return;
+        const geo = obj.geometry;
+        const pos = geo.getAttribute("position");
+        if (pos) verts += pos.count;
+        if (geo.index) faces += geo.index.count / 3;
+        else if (pos) faces += pos.count / 3;
+      });
+      return { faces: Math.round(faces), verts };
+    }
+
+    function fitModel(root) {
+      const box = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const scale = 1.8 / maxDim;
+      root.scale.setScalar(scale);
+      root.updateMatrixWorld(true);
+      const box2 = new THREE.Box3().setFromObject(root);
+      const size2 = box2.getSize(new THREE.Vector3());
+      const center2 = box2.getCenter(new THREE.Vector3());
+      root.position.sub(center2);
+      root.position.y += size2.y / 2;
+      root.updateMatrixWorld(true);
+      const fitted = new THREE.Box3().setFromObject(root);
+      const fsize = fitted.getSize(new THREE.Vector3());
+      const fcenter = fitted.getCenter(new THREE.Vector3());
+      const dist = Math.max(fsize.x, fsize.y, fsize.z) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+      controls.target.copy(fcenter);
+      camera.position.set(fcenter.x + dist * 0.7, fcenter.y + dist * 0.45, fcenter.z + dist * 0.95);
+      camera.near = Math.max(dist / 100, 0.01);
+      camera.far = dist * 40;
+      camera.updateProjectionMatrix();
+      controls.minDistance = dist * 0.35;
+      controls.maxDistance = dist * 8;
+      controls.update();
+      const extent = Math.max(fsize.x, fsize.z, 2) * 1.8;
+      ground.scale.setScalar(extent / 8);
+    }
+
+    function setStats(name, size, faces, verts) {
+      document.getElementById("statName").textContent = name || "—";
+      document.getElementById("statSize").textContent = formatBytes(size);
+      document.getElementById("statFaces").textContent = faces != null ? faces.toLocaleString("zh-Hans") : "—";
+      document.getElementById("statVerts").textContent = verts != null ? verts.toLocaleString("zh-Hans") : "—";
+    }
+
+    function showModelMsg(text, isError) {
+      modelMsg.textContent = text || "";
+      modelMsg.classList.toggle("error", !!isError);
+      modelMsg.hidden = !text;
+    }
+
+    function clearModel() {
+      if (currentRoot) {
+        scene.remove(currentRoot);
+        currentRoot.traverse((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            mats.forEach((m) => {
+              Object.values(m).forEach((v) => {
+                if (v && v.isTexture) v.dispose();
+              });
+              m.dispose();
+            });
+          }
+        });
+        currentRoot = null;
+      }
+      mixer = null;
+    }
+
+    function prepareObject(root) {
+      root.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m) => {
+            if (m && m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+          });
+        }
+      });
+    }
+
+    async function loadFromUrl(url, name, sizeHint) {
+      showModelMsg("正在加载模型…");
+      clearModel();
+      try {
+        let size = sizeHint || 0;
+        if (!size) {
+          try {
+            const head = await fetch(url, { method: "HEAD" });
+            const len = head.headers.get("content-length");
+            if (len) size = Number(len);
+          } catch (_) { /* HEAD 失败时再在 GET 后估算 */ }
+        }
+        const gltf = await loader.loadAsync(url);
+        currentRoot = gltf.scene || gltf.scenes[0];
+        prepareObject(currentRoot);
+        scene.add(currentRoot);
+        fitModel(currentRoot);
+        if (gltf.animations && gltf.animations.length) {
+          mixer = new THREE.AnimationMixer(currentRoot);
+          mixer.clipAction(gltf.animations[0]).play();
+        }
+        const { faces, verts } = countMesh(currentRoot);
+        currentModelName = name;
+        currentFileSize = size;
+        setStats(name, size, faces, verts);
+        showModelMsg("");
+        loadRating();
+      } catch (err) {
+        console.error(err);
+        setStats(name, sizeHint, null, null);
+        showModelMsg("模型加载失败：" + (err && err.message ? err.message : String(err)), true);
+      }
+    }
+
+    async function loadLocalModel(file) {
+      revokeModelUrlOnly();
+      const url = URL.createObjectURL(file);
+      objectUrls.push(url);
+      await loadFromUrl(url, file.name, file.size);
+    }
+
+    function revokeModelUrlOnly() {
+      // 照片 object URL 另管
+    }
+
+    document.getElementById("modelInput").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) loadLocalModel(file);
+      e.target.value = "";
+    });
+    document.getElementById("defaultBtn").addEventListener("click", () => {
+      loadFromUrl(DEFAULT_MODEL_URL, DEFAULT_MODEL_NAME, 181808);
+    });
+    document.getElementById("bgSelect").addEventListener("change", (e) => {
+      applyBackground(e.target.value);
+    });
+
+    // —— 照片对比 ——
+    let photos = []; // { url, name }
+    let photoIndex = 0;
+    let photoScale = 1;
+    let photoTX = 0;
+    let photoTY = 0;
+
+    function clearPhotos() {
+      photos.forEach((p) => URL.revokeObjectURL(p.url));
+      photos = [];
+      photoIndex = 0;
+      resetPhotoTransform();
+    }
+
+    function resetPhotoTransform() {
+      photoScale = 1;
+      photoTX = 0;
+      photoTY = 0;
+      applyPhotoTransform();
+    }
+
+    function applyPhotoTransform() {
+      photoImg.style.transform = `translate(${photoTX}px, ${photoTY}px) scale(${photoScale})`;
+    }
+
+    function showPhoto(i) {
+      if (!photos.length) {
+        photoImg.hidden = true;
+        photoEmpty.hidden = false;
+        prevPhoto.hidden = true;
+        nextPhoto.hidden = true;
+        photoDots.hidden = true;
+        photoBadge.textContent = "原照片";
+        return;
+      }
+      photoIndex = (i + photos.length) % photos.length;
+      photoEmpty.hidden = true;
+      photoImg.hidden = false;
+      photoImg.src = photos[photoIndex].url;
+      photoImg.alt = photos[photoIndex].name || "宠物原照片";
+      photoBadge.textContent = `原照片 ${photoIndex + 1} / ${photos.length}`;
+      const many = photos.length > 1;
+      prevPhoto.hidden = !many;
+      nextPhoto.hidden = !many;
+      photoDots.hidden = !many;
+      photoDots.innerHTML = photos.map((_, n) => `<span class="${n === photoIndex ? "on" : ""}"></span>`).join("");
+      resetPhotoTransform();
+    }
+
+    document.getElementById("photoInput").addEventListener("change", (e) => {
+      const files = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif|bmp)$/i.test(f.name));
+      if (!files.length) return;
+      clearPhotos();
+      photos = files.map((f) => ({ url: URL.createObjectURL(f), name: f.name }));
+      showPhoto(0);
+      e.target.value = "";
+    });
+    prevPhoto.addEventListener("click", () => showPhoto(photoIndex - 1));
+    nextPhoto.addEventListener("click", () => showPhoto(photoIndex + 1));
+
+    // 滑动切换、双指缩放
+    const pointers = new Map();
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let swiping = false;
+    let pinching = false;
+    let pinchStartDist = 0;
+    let pinchStartScale = 1;
+    let pinchStartTX = 0;
+    let pinchStartTY = 0;
+    let pinchMidX = 0;
+    let pinchMidY = 0;
+
+    function distOf(a, b) {
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    photoViewport.addEventListener("pointerdown", (e) => {
+      if (photoImg.hidden) return;
+      photoViewport.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, e);
+      if (pointers.size === 1) {
+        swipeStartX = e.clientX;
+        swipeStartY = e.clientY;
+        swiping = true;
+        pinching = false;
+      } else if (pointers.size === 2) {
+        const [a, b] = Array.from(pointers.values());
+        pinching = true;
+        swiping = false;
+        pinchStartDist = distOf(a, b) || 1;
+        pinchStartScale = photoScale;
+        pinchStartTX = photoTX;
+        pinchStartTY = photoTY;
+        pinchMidX = (a.clientX + b.clientX) / 2;
+        pinchMidY = (a.clientY + b.clientY) / 2;
+      }
+    });
+    photoViewport.addEventListener("pointermove", (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, e);
+      if (pinching && pointers.size >= 2) {
+        const [a, b] = Array.from(pointers.values());
+        const d = distOf(a, b) || 1;
+        photoScale = Math.min(5, Math.max(1, pinchStartScale * (d / pinchStartDist)));
+        const midX = (a.clientX + b.clientX) / 2;
+        const midY = (a.clientY + b.clientY) / 2;
+        photoTX = pinchStartTX + (midX - pinchMidX);
+        photoTY = pinchStartTY + (midY - pinchMidY);
+        applyPhotoTransform();
+      }
+    });
+    function endPointer(e) {
+      if (!pointers.has(e.pointerId)) return;
+      if (swiping && pointers.size === 1 && !pinching && photos.length > 1 && photoScale <= 1.05) {
+        const dx = e.clientX - swipeStartX;
+        const dy = e.clientY - swipeStartY;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+          showPhoto(photoIndex + (dx < 0 ? 1 : -1));
+        }
+      }
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinching = false;
+      if (pointers.size === 0) swiping = false;
+      if (photoScale <= 1.02) {
+        photoScale = 1;
+        photoTX = 0;
+        photoTY = 0;
+        applyPhotoTransform();
+      }
+    }
+    photoViewport.addEventListener("pointerup", endPointer);
+    photoViewport.addEventListener("pointercancel", endPointer);
+    photoViewport.addEventListener("pointerleave", (e) => {
+      if (pointers.has(e.pointerId)) endPointer(e);
+    });
+
+    // —— 截图 ——
+    function downloadPng(dataUrl, filename) {
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    document.getElementById("shot3dBtn").addEventListener("click", () => {
+      renderer.render(scene, camera);
+      const name = (currentModelName || "model").replace(/[^\w.\-\u4e00-\u9fff]+/g, "_");
+      downloadPng(canvas.toDataURL("image/png"), `yunpet-3d-${name}.png`);
+    });
+
+    document.getElementById("shotCmpBtn").addEventListener("click", async () => {
+      const w = Math.max(window.innerWidth, 640);
+      const isLandscape = window.matchMedia("(orientation: landscape), (min-width: 900px)").matches;
+      const h = isLandscape ? Math.round(w * 0.56) : Math.round(w * 1.15);
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#1a1f1c";
+      ctx.fillRect(0, 0, w, h);
+      const gap = 4;
+      let photoBox, modelBox;
+      if (isLandscape) {
+        const pw = Math.floor((w - gap) / 2);
+        photoBox = { x: 0, y: 0, w: pw, h };
+        modelBox = { x: pw + gap, y: 0, w: w - pw - gap, h };
+      } else {
+        const ph = Math.floor(h * 0.4);
+        photoBox = { x: 0, y: 0, w, h: ph };
+        modelBox = { x: 0, y: ph + gap, w, h: h - ph - gap };
+      }
+      ctx.fillStyle = "#0e1310";
+      ctx.fillRect(photoBox.x, photoBox.y, photoBox.w, photoBox.h);
+      if (!photoImg.hidden && photoImg.naturalWidth) {
+        const iw = photoImg.naturalWidth;
+        const ih = photoImg.naturalHeight;
+        const scale = Math.min(photoBox.w / iw, photoBox.h / ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        ctx.drawImage(photoImg, photoBox.x + (photoBox.w - dw) / 2, photoBox.y + (photoBox.h - dh) / 2, dw, dh);
+      } else {
+        ctx.fillStyle = "#a8b5ad";
+        ctx.font = "16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("未加载原照片", photoBox.x + photoBox.w / 2, photoBox.y + photoBox.h / 2);
+      }
+      renderer.render(scene, camera);
+      const cw = canvas.width;
+      const ch = canvas.height;
+      const scaleC = Math.min(modelBox.w / cw, modelBox.h / ch);
+      const dw = cw * scaleC;
+      const dh = ch * scaleC;
+      ctx.drawImage(canvas, modelBox.x + (modelBox.w - dw) / 2, modelBox.y + (modelBox.h - dh) / 2, dw, dh);
+      ctx.fillStyle = "rgba(20,28,24,0.8)";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("原照片", photoBox.x + 10, photoBox.y + 20);
+      ctx.fillText("3D 模型", modelBox.x + 10, modelBox.y + 20);
+      const name = (currentModelName || "model").replace(/[^\w.\-\u4e00-\u9fff]+/g, "_");
+      downloadPng(out.toDataURL("image/png"), `yunpet-compare-${name}.png`);
+    });
+
+    // —— 本地打分 ——
+    function ratingStore() {
+      try { return JSON.parse(localStorage.getItem(RATING_KEY) || "{}"); }
+      catch { return {}; }
+    }
+    function saveRating(score) {
+      if (!currentModelName) return;
+      const all = ratingStore();
+      all[currentModelName] = { score, savedAt: new Date().toISOString() };
+      localStorage.setItem(RATING_KEY, JSON.stringify(all));
+      paintStars(score);
+      document.getElementById("rateNote").textContent = `已在本机保存 ${score} 分，不会上传。`;
+    }
+    function loadRating() {
+      const rec = ratingStore()[currentModelName];
+      if (rec && rec.score) {
+        paintStars(rec.score);
+        document.getElementById("rateNote").textContent = `本机已有 ${rec.score} 分记录，不会上传。`;
+      } else {
+        paintStars(0);
+        document.getElementById("rateNote").textContent = "只保存在本机浏览器，不会上传。";
+      }
+    }
+    function paintStars(score) {
+      document.querySelectorAll("#stars button").forEach((btn) => {
+        btn.classList.toggle("on", Number(btn.dataset.score) <= score && score > 0);
+      });
+    }
+    document.getElementById("stars").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-score]");
+      if (btn) saveRating(Number(btn.dataset.score));
+    });
+
+    // —— 尺寸与循环 ——
+    function resize() {
+      const pane = canvas.parentElement;
+      const w = Math.max(1, pane.clientWidth);
+      const h = Math.max(1, pane.clientHeight);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement);
+    window.addEventListener("orientationchange", () => setTimeout(resize, 200));
+
+    function loop() {
+      requestAnimationFrame(loop);
+      const dt = clock.getDelta();
+      if (mixer) mixer.update(dt);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    loop();
+    loadFromUrl(DEFAULT_MODEL_URL, DEFAULT_MODEL_NAME, 181808);
+  </script>
+</body>
+</html>
