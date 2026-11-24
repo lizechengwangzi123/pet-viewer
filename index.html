@@ -234,6 +234,23 @@
       color: #fffef4;
     }
     .local-note { font-size: 11px; color: var(--muted); }
+    .sample-switch { display: flex; flex-wrap: wrap; gap: 6px; }
+    .sample-switch button {
+      min-height: 36px;
+      padding: 8px 12px;
+    }
+    .source-block {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .source-block p { margin: 0; }
+    .source-note, .privacy-note {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .source-note a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -247,7 +264,10 @@
       <label class="file-btn">加载原照片
         <input id="photoInput" type="file" accept="image/*" multiple />
       </label>
-      <button type="button" id="defaultBtn">示例模型</button>
+      <div class="sample-switch" role="group" aria-label="示例模型">
+        <button type="button" id="sampleHorseBtn" class="primary">示例：马</button>
+        <button type="button" id="sampleBoxerBtn">示例：拳师犬</button>
+      </div>
       <select id="bgSelect" aria-label="背景">
         <option value="studio">背景：工作室</option>
         <option value="park">背景：公园</option>
@@ -296,6 +316,10 @@
       </div>
       <span class="local-note" id="rateNote">只保存在本机浏览器，不会上传。</span>
     </div>
+    <div class="source-block">
+      <p class="source-note" id="sourceNote">three.js 官方示例模型</p>
+      <p class="privacy-note">本页只放公开测试素材，不含任何用户照片或模型。</p>
+    </div>
   </footer>
 
   <script type="module">
@@ -306,8 +330,26 @@
     // Fox.glb 已不在 three.js 官方 examples 目录（2026-11-11 核实为 404）。
     // 改用官方示例中可访问的四足动物 Horse.glb（HTTP 200，CORS *，181808 字节）。
     // 使用本地官方示例模型，避免中国大陆访问 threejs.org / jsDelivr 不稳定。
-    const DEFAULT_MODEL_URL = "./vendor/models/Horse.glb";
-    const DEFAULT_MODEL_NAME = "Horse.glb（three.js 官方示例，本地打包）";
+    // 第二个公开测试模型：拳师犬，由开源 TripoSR 根据 Wikimedia Commons CC0 照片生成。
+    const SAMPLE_MODELS = {
+      horse: {
+        id: "horse",
+        url: "./vendor/models/Horse.glb",
+        name: "Horse.glb（three.js 官方示例，本地打包）",
+        size: 181808,
+        credit: "three.js 官方示例模型",
+      },
+      boxer: {
+        id: "boxer",
+        url: "./vendor/models/Boxer.glb",
+        name: "Boxer.glb（TripoSR 公开测试模型）",
+        size: 1043932,
+        creditHtml: "测试模型：用开源 TripoSR 根据公开照片生成。原照片：Wikimedia Commons<a href=\"https://commons.wikimedia.org/wiki/File:Boxer_dog_posing_on_the_grass.jpg\" target=\"_blank\" rel=\"noopener noreferrer\">『Boxer dog posing on the grass』</a>，CC0 公有领域授权",
+      },
+    };
+    const DEFAULT_SAMPLE_ID = "horse";
+    const DEFAULT_MODEL_URL = SAMPLE_MODELS.horse.url;
+    const DEFAULT_MODEL_NAME = SAMPLE_MODELS.horse.name;
     const RATING_KEY = "yunpet-viewer-ratings-v1";
 
     const canvas = document.getElementById("canvas");
@@ -332,7 +374,7 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
@@ -396,7 +438,8 @@
     const loader = new GLTFLoader();
     let currentRoot = null;
     let mixer = null;
-    let clock = new THREE.Clock();
+    const timer = new THREE.Timer();
+    timer.connect(document);
     let currentModelName = "";
     let currentFileSize = 0;
     let objectUrls = [];
@@ -548,14 +591,49 @@
       // 照片 object URL 另管
     }
 
+    const sourceNote = document.getElementById("sourceNote");
+    const sampleHorseBtn = document.getElementById("sampleHorseBtn");
+    const sampleBoxerBtn = document.getElementById("sampleBoxerBtn");
+
+    function setSourceNote(sampleId) {
+      if (sampleId === "boxer") {
+        sourceNote.innerHTML = SAMPLE_MODELS.boxer.creditHtml;
+      } else if (sampleId === "horse") {
+        sourceNote.textContent = SAMPLE_MODELS.horse.credit;
+      } else {
+        sourceNote.textContent = "当前为本地选择的文件，仅在本机打开。";
+      }
+    }
+
+    function markSampleButtons(sampleId) {
+      sampleHorseBtn.classList.toggle("primary", sampleId === "horse");
+      sampleBoxerBtn.classList.toggle("primary", sampleId === "boxer");
+    }
+
+    async function loadSample(id, updateUrl) {
+      const sample = SAMPLE_MODELS[id] || SAMPLE_MODELS.horse;
+      markSampleButtons(sample.id);
+      setSourceNote(sample.id);
+      if (updateUrl) {
+        const next = new URL(location.href);
+        if (sample.id === DEFAULT_SAMPLE_ID) next.searchParams.delete("model");
+        else next.searchParams.set("model", sample.id);
+        history.replaceState(null, "", next);
+      }
+      await loadFromUrl(sample.url, sample.name, sample.size);
+    }
+
     document.getElementById("modelInput").addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
-      if (file) loadLocalModel(file);
+      if (file) {
+        markSampleButtons(null);
+        setSourceNote(null);
+        loadLocalModel(file);
+      }
       e.target.value = "";
     });
-    document.getElementById("defaultBtn").addEventListener("click", () => {
-      loadFromUrl(DEFAULT_MODEL_URL, DEFAULT_MODEL_NAME, 181808);
-    });
+    sampleHorseBtn.addEventListener("click", () => loadSample("horse", true));
+    sampleBoxerBtn.addEventListener("click", () => loadSample("boxer", true));
     document.getElementById("bgSelect").addEventListener("change", (e) => {
       applyBackground(e.target.value);
     });
@@ -813,15 +891,18 @@
     ro.observe(canvas.parentElement);
     window.addEventListener("orientationchange", () => setTimeout(resize, 200));
 
-    function loop() {
+    function loop(timestamp) {
       requestAnimationFrame(loop);
-      const dt = clock.getDelta();
+      timer.update(timestamp);
+      const dt = timer.getDelta();
       if (mixer) mixer.update(dt);
       controls.update();
       renderer.render(scene, camera);
     }
     loop();
-    loadFromUrl(DEFAULT_MODEL_URL, DEFAULT_MODEL_NAME, 181808);
+    const requested = new URLSearchParams(location.search).get("model");
+    const startId = requested === "boxer" ? "boxer" : "horse";
+    loadSample(startId, false);
   </script>
 </body>
 </html>
